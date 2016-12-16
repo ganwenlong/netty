@@ -563,6 +563,8 @@ public abstract class HttpObjectDecoder extends ByteToMessageDecoder {
     }
 
     private State readHeaders(ByteBuf buffer) {
+        //buffer.markReaderIndex();
+        headerParser.markReaderIndex(buffer);
         final HttpMessage message = this.message;
         final HttpHeaders headers = message.headers();
 
@@ -582,12 +584,16 @@ public abstract class HttpObjectDecoder extends ByteToMessageDecoder {
                 } else {
                     if (name != null) {
                         headers.add(name, value);
+                        //buffer.markReaderIndex();
+                        headerParser.markReaderIndex(buffer);
                     }
                     splitHeader(line);
                 }
 
                 line = headerParser.parse(buffer);
                 if (line == null) {
+                    //buffer.resetReaderIndex();
+                    headerParser.resetReaderIndex(buffer);
                     return null;
                 }
             } while (line.length() > 0);
@@ -597,6 +603,7 @@ public abstract class HttpObjectDecoder extends ByteToMessageDecoder {
         if (name != null) {
             headers.add(name, value);
         }
+        headerParser.removeReaderIndex();
         // reset name and value fields
         name = null;
         value = null;
@@ -780,11 +787,28 @@ public abstract class HttpObjectDecoder extends ByteToMessageDecoder {
         private final AppendableCharSequence seq;
         private final int maxLength;
         private int size;
+        private int headBeginIndex = -1;
 
         HeaderParser(AppendableCharSequence seq, int maxLength) {
             this.seq = seq;
             this.maxLength = maxLength;
         }
+
+        public void markReaderIndex(ByteBuf buffer) {
+			headBeginIndex = buffer.readerIndex();
+		}
+        
+		public void removeReaderIndex() {
+			headBeginIndex = -1;
+		}
+        
+		public void resetReaderIndex(ByteBuf buffer) {
+			if(headBeginIndex < 0) {
+				throw new IndexOutOfBoundsException("unmark");
+			}
+			buffer.readerIndex(headBeginIndex);
+			removeReaderIndex();
+		}
 
         public AppendableCharSequence parse(ByteBuf buffer) {
             final int oldSize = size;
